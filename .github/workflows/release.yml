@@ -46,3 +46,11 @@ jobs:
       run: |
         echo "Release job completed successfully"
         echo "MY_SECRET=$MY_SECRET"
+  
+  deploy:
+    runs-on: ubuntu-latest
+    needs: release
+    steps:
+    - name: Deploy
+      run: |
+        echo "Deploy job completed successfully"
