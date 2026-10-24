@@ -3,6 +3,13 @@ name: Release
 on:
   push:
     branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      security:
+        description: Security value to echo in the release step
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -10,6 +17,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
     - uses: actions/checkout@v7
     - uses: actions/setup-node@v7
@@ -23,6 +31,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: build
     steps:
     - uses: actions/checkout@v7
@@ -37,20 +46,93 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: test
     environment: dev
     steps:
     - name: Release
       env:
         MY_SECRET: ${{ secrets.MY_SECRET }}
+        SECURITY: ${{ inputs.security }}
       run: |
         echo "Release job completed successfully"
         echo "MY_SECRET=$MY_SECRET"
-  
+        echo "security=${SECURITY:-<not set>}"
+
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: release
     steps:
     - name: Deploy
       run: |
         echo "Deploy job completed successfully"
+
+  github-release:
+    # Creates a GitHub release (patch version +1) for every merge to main.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: deploy
+    permissions:
+      contents: write
+    concurrency:
+      group: github-release
+      cancel-in-progress: false
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+    - name: Determine next version
+      id: version
+      run: |
+        latest=$(gh release list --limit 1 --json tagName --jq '.[0].tagName // empty')
+        if [ -z "$latest" ]; then
+          tag=v1.0.0
+        else
+          IFS=. read -r major minor patch <<< "${latest#v}"
+          tag="v${major}.${minor}.$((patch + 1))"
+        fi
+        echo "Previous: ${latest:-none}, next: $tag"
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+    - name: Create release
+      env:
+        TAG: ${{ steps.version.outputs.tag }}
+      run: gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+
+  notify:
+    # Emails a summary of every merge to main, even when the pipeline failed.
+    if: always() && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [build, test, release, deploy, github-release]
+    steps:
+    - name: Send email
+      uses: dawidd6/action-send-mail@47af4a10b540781705f283a2cf1a9650713ac795 # v23
+      with:
+        server_address: smtp.gmail.com
+        server_port: 465
+        secure: true
+        username: ${{ secrets.SMTP_USERNAME }}
+        password: ${{ secrets.SMTP_PASSWORD }}
+        from: GitHub Actions <${{ secrets.SMTP_USERNAME }}>
+        to: ${{ secrets.SMTP_USERNAME }}
+        subject: "[${{ github.repository }}] merge to main: ${{ needs.github-release.outputs.tag || 'no release' }}"
+        body: |
+          A change was merged to main in ${{ github.repository }}.
+
+          Commit:  ${{ github.event.head_commit.message }}
+          By:      ${{ github.actor }}
+          SHA:     ${{ github.sha }}
+          Release: ${{ needs.github-release.outputs.tag || 'not created' }}
+
+          Job results
+          build:          ${{ needs.build.result }}
+          test:           ${{ needs.test.result }}
+          release:        ${{ needs.release.result }}
+          deploy:         ${{ needs.deploy.result }}
+          github-release: ${{ needs.github-release.result }}
+
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
