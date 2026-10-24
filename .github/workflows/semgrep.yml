@@ -1,0 +1,20 @@
+name: Semgrep
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep security scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    container:
+      image: semgrep/semgrep:1.182.0@sha256:4a34048c04fef049f71665047f074cffb00cc3d89482f965a5cd151d589237af
+    steps:
+    - uses: actions/checkout@v7
+    - name: Run Semgrep
+      run: semgrep scan --config p/default --config p/javascript --metrics off --error
