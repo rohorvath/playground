@@ -109,30 +109,20 @@ jobs:
     timeout-minutes: 5
     needs: [build, test, release, deploy, github-release]
     steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Send email
-      uses: dawidd6/action-send-mail@47af4a10b540781705f283a2cf1a9650713ac795 # v23
-      with:
-        server_address: smtp.gmail.com
-        server_port: 465
-        secure: true
-        username: ${{ secrets.SMTP_USERNAME }}
-        password: ${{ secrets.SMTP_PASSWORD }}
-        from: GitHub Actions <${{ secrets.SMTP_USERNAME }}>
-        to: ${{ secrets.SMTP_USERNAME }}
-        subject: "[${{ github.repository }}] merge to main: ${{ needs.github-release.outputs.tag || 'no release' }}"
-        body: |
-          A change was merged to main in ${{ github.repository }}.
-
-          Commit:  ${{ github.event.head_commit.message }}
-          By:      ${{ github.actor }}
-          SHA:     ${{ github.sha }}
-          Release: ${{ needs.github-release.outputs.tag || 'not created' }}
-
-          Job results
-          build:          ${{ needs.build.result }}
-          test:           ${{ needs.test.result }}
-          release:        ${{ needs.release.result }}
-          deploy:         ${{ needs.deploy.result }}
-          github-release: ${{ needs.github-release.result }}
-
-          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      env:
+        SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+        SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        REPO: ${{ github.repository }}
+        ACTOR: ${{ github.actor }}
+        SHA: ${{ github.sha }}
+        COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        RELEASE_TAG: ${{ needs.github-release.outputs.tag }}
+        RESULT_BUILD: ${{ needs.build.result }}
+        RESULT_TEST: ${{ needs.test.result }}
+        RESULT_RELEASE: ${{ needs.release.result }}
+        RESULT_DEPLOY: ${{ needs.deploy.result }}
+        RESULT_GITHUB_RELEASE: ${{ needs.github-release.result }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: python3 .github/scripts/send-mail.py
