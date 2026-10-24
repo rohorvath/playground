@@ -15,6 +15,9 @@ const page = `<!doctype html>
 </html>
 `;
 
+// Plain HTTP on purpose: this demo app has no certificates. TLS is expected to be
+// terminated by a reverse proxy or the hosting platform in front of it.
+// nosemgrep: problem-based-packs.insecure-transport.js-node.using-http-server.using-http-server
 const server = http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(page);
