@@ -27,6 +27,9 @@ jobs:
       with:
         node-version: ${{ inputs.node-version }}
         cache: 'npm'
+    - name: Log tool versions (debug only)
+      shell: pwsh
+      run: Write-Host "::debug::node=$(node -v) npm=$(npm -v)"
     - name: Install dependencies
       run: npm ci
     - name: Build
